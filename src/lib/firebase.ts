@@ -10,8 +10,7 @@ let storage: any;
 
 try {
   const app = initializeApp(firebaseConfig);
-  // @ts-ignore
-  db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+  db = getFirestore(app);
   auth = getAuth(app);
   storage = getStorage(app);
 
