@@ -36,7 +36,7 @@ service cloud.firestore {
         && data.tone is string && data.tone.size() <= 100
         && data.language is string && data.language.size() <= 50
         && data.voice in ['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr']
-        && data.createdAt is string // Using ISO string for now based on app code
+        && data.createdAt is string
         && data.updatedAt is string;
     }
 
@@ -48,7 +48,7 @@ service cloud.firestore {
         && data.duration is string && data.duration.size() <= 20
         && data.enriched is bool
         && (data.get('script', '') is string && data.get('script', '').size() <= 50000)
-        && (data.get('audioData', '') is string && data.get('audioData', '').size() <= 10000000) // 10MB limit for base64
+        && (data.get('audioUrl', '') is string && data.get('audioUrl', '').size() <= 2048)
         && data.createdAt is string;
     }
 
@@ -56,8 +56,8 @@ service cloud.firestore {
     match /channels/{channelId} {
       allow get: if isOwner(existing().userId);
       allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
-      
-      allow create: if isSignedIn() 
+
+      allow create: if isSignedIn()
         && isValidChannel(incoming())
         && incoming().keys().hasAll(['userId', 'name', 'audience', 'tone', 'language', 'voice', 'createdAt', 'updatedAt'])
         && incoming().keys().size() == 9;
@@ -69,7 +69,7 @@ service cloud.firestore {
         && (
           incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'audience', 'tone', 'language', 'voice', 'updatedAt'])
         );
-      
+
       allow delete: if isOwner(existing().userId);
     }
 
@@ -92,11 +92,11 @@ service cloud.firestore {
         && incoming().createdAt == existing().createdAt
         && (
           // Action: Set Script & Metadata
-          (incoming().diff(existing()).affectedKeys().hasAll(['title', 'description', 'script', 'updatedAt']) && 
+          (incoming().diff(existing()).affectedKeys().hasAll(['title', 'description', 'script', 'updatedAt']) &&
            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'script', 'updatedAt'])) ||
-          // Action: Set Audio
-          (incoming().diff(existing()).affectedKeys().hasAll(['audioData', 'status', 'updatedAt']) && 
-           incoming().diff(existing()).affectedKeys().hasOnly(['audioData', 'status', 'updatedAt']))
+          // Action: Set Audio URL
+          (incoming().diff(existing()).affectedKeys().hasAll(['audioUrl', 'status', 'updatedAt']) &&
+           incoming().diff(existing()).affectedKeys().hasOnly(['audioUrl', 'status', 'updatedAt']))
         );
 
       allow delete: if isOwner(existing().userId);

@@ -1,16 +1,19 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 import firebaseConfig from './../../firebase-applet-config.json';
 
 let db: any;
 let auth: any;
+let storage: any;
 
 try {
   const app = initializeApp(firebaseConfig);
   // @ts-ignore
   db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
   auth = getAuth(app);
+  storage = getStorage(app);
 
   const testConnection = async () => {
     if (!db) return;
@@ -48,8 +51,6 @@ function handleFirestoreError(error: any, operationType: string, path: string | 
     } : null,
   };
   console.error("Firestore Error:", info);
-  // We don't throw to avoid crashing the whole app, instead we can show a notification if we had more time.
-  // For now, logging to console is safer for app stability.
 }
 
-export { db, auth, handleFirestoreError };
+export { db, auth, storage, handleFirestoreError };

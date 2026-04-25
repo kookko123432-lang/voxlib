@@ -20,7 +20,7 @@ export interface Episode {
   description: string;
   bookTitle: string;
   script: string;
-  audioData?: string; // base64
+  audioUrl?: string; // Firebase Storage download URL
   duration: string; // e.g., "5 mins", "15 mins"
   status: 'draft' | 'scripted' | 'generating_audio' | 'completed';
   enriched: boolean;

@@ -55,7 +55,7 @@ export default function EpisodeList({ episodes }: EpisodeListProps) {
               <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
                 episode.status === 'completed' ? 'bg-accent/10 text-accent group-hover:bg-accent group-hover:text-black' : 'bg-surface text-text-muted'
               }`}>
-                {episode.audioData ? <Waveform className="w-6 h-6" /> : <Loader2 className="w-5 h-5 animate-spin" />}
+                {episode.audioUrl ? <Waveform className="w-6 h-6" /> : <Loader2 className="w-5 h-5 animate-spin" />}
               </div>
               {episode.status === 'completed' && (
                 <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-widget-bg" />
@@ -76,7 +76,7 @@ export default function EpisodeList({ episodes }: EpisodeListProps) {
             </div>
 
             <div className="flex items-center gap-3">
-              {episode.audioData && (
+              {episode.audioUrl && (
                 <button 
                   onClick={() => setPlayingEpisode(episode)}
                   className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold transition-all ${
@@ -116,9 +116,9 @@ export default function EpisodeList({ episodes }: EpisodeListProps) {
               >
                 <X className="w-4 h-4" />
               </button>
-              <AudioPlayer 
-                base64Data={playingEpisode.audioData!} 
-                title={playingEpisode.title || playingEpisode.bookTitle} 
+              <AudioPlayer
+                audioUrl={playingEpisode.audioUrl!}
+                title={playingEpisode.title || playingEpisode.bookTitle}
               />
             </div>
           </motion.div>

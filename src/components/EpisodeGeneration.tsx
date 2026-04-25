@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
 import { Channel } from '../types';
-import { db, auth, handleFirestoreError } from '../lib/firebase';
+import { db, auth, storage, handleFirestoreError } from '../lib/firebase';
 import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
-import { Upload, Book, Clock, Sparkles, Loader2, CheckCircle2, Play, Download, Volume2 } from 'lucide-react';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { extractTextFromFile } from '../lib/pdfParser';
+import { generateScript, generateAudio, generateMetadata } from '../lib/gemini';
+import { hasApiKey } from '../lib/apiKey';
+import { Upload, Sparkles, Loader2, CheckCircle2, Volume2, KeyRound } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface EpisodeGenerationProps {
@@ -28,24 +32,25 @@ export default function EpisodeGeneration({ channel, onComplete }: EpisodeGenera
 
   const startGeneration = async () => {
     if (!file || !auth.currentUser) return;
+    if (!hasApiKey()) {
+      setProgress('API_KEY_REQUIRED_CONFIGURE_IN_SETTINGS');
+      return;
+    }
+
     setIsProcessing(true);
     setStep(2);
-    
+
     try {
-      // 1. Extract Text from PDF
+      // 1. Extract Text from PDF (client-side)
       setProgress('ANALYZING_MANUSCRIPT_CORE...');
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await fetch('/api/extract-pdf', { method: 'POST', body: formData });
-      if (!res.ok) throw new Error(`PDF extraction failed: ${res.status}`);
-      const { text } = await res.json();
+      const text = await extractTextFromFile(file);
 
       // 2. Create Initial Record
       setProgress('ARCHIVING_MANIFEST...');
       const epData = {
         userId: auth.currentUser.uid,
         channelId: channel.id,
-        bookTitle: file.name.replace(/\.[^/.]+$/, ""),
+        bookTitle: file.name.replace(/\.[^/.]+$/, ''),
         status: 'scripted',
         duration,
         enriched: enrich,
@@ -54,36 +59,19 @@ export default function EpisodeGeneration({ channel, onComplete }: EpisodeGenera
       const docRef = await addDoc(collection(db, 'episodes'), epData);
       setCurrentEpisodeId(docRef.id);
 
-      // 3. Generate Script
+      // 3. Generate Script (client-side Gemini API)
       setProgress('SYNTHESIZING_SCRIPT_MATRIX...');
-      const scriptRes = await fetch('/api/generate-script', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          channel,
-          bookContent: text,
-          duration,
-          enrich
-        })
-      });
-      if (!scriptRes.ok) throw new Error(`Script generation failed: ${scriptRes.status}`);
-      const { script: generatedScript } = await scriptRes.json();
+      const generatedScript = await generateScript(channel, text, duration);
       setScript(generatedScript || '');
-      
-      // 4. Generate Metadata
+
+      // 4. Generate Metadata (client-side Gemini API)
       setProgress('EXTRACTING_TELEMETRY...');
-      const metaRes = await fetch('/api/generate-metadata', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ script: generatedScript, channel })
-      });
-      if (!metaRes.ok) throw new Error(`Metadata generation failed: ${metaRes.status}`);
-      const meta = await metaRes.json();
+      const meta = await generateMetadata(generatedScript, channel);
       await updateDoc(doc(db, 'episodes', docRef.id), {
         title: meta.title,
         description: meta.description,
         script: generatedScript,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       });
 
       setStep(3);
@@ -96,23 +84,32 @@ export default function EpisodeGeneration({ channel, onComplete }: EpisodeGenera
   };
 
   const startAudioGeneration = async () => {
-    if (!currentEpisodeId || !script) return;
+    if (!currentEpisodeId || !script || !auth.currentUser) return;
     setIsProcessing(true);
     setProgress('TRANSDUCING_AUDIO_WAVEFORMS...');
-    
-    try {
-      const audioRes = await fetch('/api/generate-audio', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ script, voice: channel.voice })
-      });
-      if (!audioRes.ok) throw new Error(`Audio generation failed: ${audioRes.status}`);
-      const { audioData } = await audioRes.json();
 
+    try {
+      // 1. Generate audio via Gemini (client-side)
+      const audioBase64 = await generateAudio(script, channel.voice);
+
+      // 2. Convert base64 to blob and upload to Firebase Storage
+      setProgress('UPLOADING_TO_STORAGE...');
+      const binary = atob(audioBase64);
+      const array = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        array[i] = binary.charCodeAt(i);
+      }
+      const blob = new Blob([array], { type: 'audio/mpeg' });
+
+      const storageRef = ref(storage, `audio/${auth.currentUser.uid}/${currentEpisodeId}.mp3`);
+      await uploadBytes(storageRef, blob);
+      const audioUrl = await getDownloadURL(storageRef);
+
+      // 3. Update Firestore with Storage URL
       await updateDoc(doc(db, 'episodes', currentEpisodeId), {
-        audioData: audioData,
+        audioUrl,
         status: 'completed',
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       });
       setStep(4);
     } catch (e) {
@@ -146,6 +143,15 @@ export default function EpisodeGeneration({ channel, onComplete }: EpisodeGenera
         ))}
       </div>
 
+      {!hasApiKey() && (
+        <div className="mb-6 flex items-center gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl px-5 py-3">
+          <KeyRound className="w-5 h-5 text-amber-400 shrink-0" />
+          <p className="text-sm text-amber-300/90">
+            API key not configured. Go to <span className="font-bold">Settings</span> to add your Gemini API key before generating.
+          </p>
+        </div>
+      )}
+
       <div className="bg-surface rounded-2xl border border-white/5 p-10 relative overflow-hidden">
         {/* Glow Effects */}
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-accent/5 blur-3xl rounded-full" />
@@ -158,7 +164,7 @@ export default function EpisodeGeneration({ channel, onComplete }: EpisodeGenera
               <p className="text-text-muted text-sm mt-2 font-medium">Ingest book manuscript to initiate AI synthesis</p>
             </div>
 
-            <div 
+            <div
               className={`border-2 border-dashed rounded-2xl p-12 text-center transition-all cursor-pointer group ${
                 file ? 'border-accent bg-accent/10' : 'border-border-dim bg-app-bg hover:border-accent/50'
               }`}
@@ -175,7 +181,7 @@ export default function EpisodeGeneration({ channel, onComplete }: EpisodeGenera
             <div className="grid grid-cols-2 gap-6 pb-2">
               <div className="space-y-3">
                 <label className="text-[11px] font-bold text-text-muted uppercase tracking-tighter">Target Broadcast Duration</label>
-                <select 
+                <select
                   value={duration}
                   onChange={(e) => setDuration(e.target.value)}
                   className="w-full bg-app-bg border border-border-dim rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-accent transition-all appearance-none"
@@ -188,7 +194,7 @@ export default function EpisodeGeneration({ channel, onComplete }: EpisodeGenera
               </div>
               <div className="space-y-3">
                 <label className="text-[11px] font-bold text-text-muted uppercase tracking-tighter">Production Enhancement</label>
-                <button 
+                <button
                   onClick={() => setEnrich(!enrich)}
                   className={`w-full flex items-center justify-between gap-2 rounded-xl px-4 py-3 text-sm font-bold border transition-all ${
                     enrich ? 'bg-accent/10 border-accent/40 text-accent' : 'bg-app-bg border-border-dim text-text-muted'
@@ -203,9 +209,9 @@ export default function EpisodeGeneration({ channel, onComplete }: EpisodeGenera
             </div>
 
             <div className="pt-2">
-              <button 
+              <button
                 onClick={startGeneration}
-                disabled={!file}
+                disabled={!file || !hasApiKey()}
                 className="w-full bg-accent hover:bg-accent-hover text-black font-bold py-5 rounded-2xl shadow-xl shadow-accent/10 hover:scale-[1.01] active:scale-[0.99] transition-all disabled:opacity-50 disabled:grayscale disabled:scale-100 flex items-center justify-center gap-3"
               >
                 GENERATE PODCAST
@@ -242,13 +248,13 @@ export default function EpisodeGeneration({ channel, onComplete }: EpisodeGenera
             </div>
 
             <div className="flex gap-4 pt-2">
-              <button 
+              <button
                 onClick={() => setStep(1)}
                 className="flex-1 border border-border-dim hover:bg-surface rounded-xl text-xs font-bold transition-all uppercase tracking-widest text-text-muted"
               >
                 Refine Parameters
               </button>
-              <button 
+              <button
                 onClick={startAudioGeneration}
                 disabled={isProcessing}
                 className="flex-[2] bg-accent hover:bg-accent-hover text-black font-bold py-4 rounded-xl shadow-[0_0_20px_rgba(245,158,11,0.15)] hover:scale-[1.01] transition-all flex items-center justify-center gap-3 uppercase tracking-widest text-sm"
@@ -275,13 +281,13 @@ export default function EpisodeGeneration({ channel, onComplete }: EpisodeGenera
             </div>
 
             <div className="flex gap-4 w-full max-w-sm">
-              <button 
+              <button
                 onClick={onComplete}
                 className="flex-1 bg-app-bg border border-border-dim hover:bg-surface p-4 rounded-xl text-xs font-bold uppercase tracking-widest transition-all text-white/80"
               >
                 Open Archive
               </button>
-              <button 
+              <button
                 onClick={() => setStep(1)}
                 className="flex-1 bg-accent hover:bg-accent-hover text-black p-4 rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-lg shadow-accent/10"
               >

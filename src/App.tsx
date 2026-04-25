@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { db, auth, handleFirestoreError } from './lib/firebase';
 import { collection, onSnapshot, query, orderBy, where } from 'firebase/firestore';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
@@ -7,15 +7,18 @@ import Sidebar from './components/Sidebar';
 import EpisodeList from './components/EpisodeList';
 import EpisodeGeneration from './components/EpisodeGeneration';
 import ChannelSettings from './components/ChannelSettings';
-import { Mic, Mic2, Radio, Plus, Settings, BookOpen, LogIn, Loader2 } from 'lucide-react';
+import ApiKeySettings from './components/ApiKeySettings';
+import { Mic2, Radio, LogIn, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+
+type ViewType = 'episodes' | 'generate' | 'settings' | 'apikey';
 
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
-  const [view, setView] = useState<'episodes' | 'generate' | 'settings'>('episodes');
+  const [view, setView] = useState<ViewType>('episodes');
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [uptimeStart] = useState(() => Date.now());
   const [uptime, setUptime] = useState('00:00:00');
@@ -56,9 +59,9 @@ export default function App() {
   useEffect(() => {
     if (!db || !user) return;
     const q = query(
-      collection(db, "channels"), 
-      where("userId", "==", user.uid),
-      orderBy("createdAt", "desc")
+      collection(db, 'channels'),
+      where('userId', '==', user.uid),
+      orderBy('createdAt', 'desc')
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Channel));
@@ -73,10 +76,10 @@ export default function App() {
   useEffect(() => {
     if (!db || !selectedChannelId || !user) return;
     const q = query(
-      collection(db, "episodes"),
-      where("userId", "==", user.uid),
-      where("channelId", "==", selectedChannelId),
-      orderBy("createdAt", "desc")
+      collection(db, 'episodes'),
+      where('userId', '==', user.uid),
+      where('channelId', '==', selectedChannelId),
+      orderBy('createdAt', 'desc')
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs
@@ -100,7 +103,7 @@ export default function App() {
   if (!user) {
     return (
       <div className="h-screen bg-app-bg flex items-center justify-center p-8">
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           className="bg-widget-bg p-12 rounded-3xl border border-border-dim text-center max-w-md w-full shadow-2xl relative overflow-hidden"
@@ -111,15 +114,15 @@ export default function App() {
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-white mb-2">VOX SCRIPT AI</h1>
           <p className="text-text-muted text-sm font-medium mb-10">Professional Podcast Production Core</p>
-          
-          <button 
+
+          <button
             onClick={handleSignIn}
             className="w-full bg-accent hover:bg-accent-hover text-black font-bold py-5 rounded-2xl flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-accent/10"
           >
             <LogIn className="w-5 h-5" />
             INITIALIZE AUTHENTICATION
           </button>
-          
+
           <p className="mt-8 text-[10px] font-mono text-text-muted uppercase tracking-[.4em] font-bold">Authorized Personnel Only</p>
         </motion.div>
       </div>
@@ -131,11 +134,12 @@ export default function App() {
   return (
     <div className="flex h-screen bg-app-bg text-white overflow-hidden selection:bg-accent selection:text-black">
       {/* Sidebar - The Console */}
-      <Sidebar 
-        channels={channels} 
-        selectedChannelId={selectedChannelId} 
-        setSelectedChannelId={setSelectedChannelId} 
+      <Sidebar
+        channels={channels}
+        selectedChannelId={selectedChannelId}
+        setSelectedChannelId={setSelectedChannelId}
         onAddChannel={() => setView('settings')}
+        onApiKeySettings={() => setView('apikey')}
       />
 
       {/* Main Workspace */}
@@ -146,32 +150,38 @@ export default function App() {
             <Radio className="w-5 h-5 text-accent animate-pulse" />
             <div>
               <h1 className="text-sm font-semibold tracking-tighter text-white uppercase">
-                {selectedChannel ? `${selectedChannel.name}` : 'NEW PODCAST PRODUCTION'}
+                {view === 'apikey' ? 'API CONFIGURATION' : selectedChannel ? `${selectedChannel.name}` : 'NEW PODCAST PRODUCTION'}
               </h1>
               <p className="text-[10px] font-mono text-text-muted uppercase tracking-[.2em]">
-                System Active // {selectedChannel ? selectedChannel.audience : 'Ready to Broadcast'}
+                System Active // {view === 'apikey' ? 'Security Settings' : selectedChannel ? selectedChannel.audience : 'Ready to Broadcast'}
               </p>
             </div>
           </div>
 
           <nav className="flex gap-1 bg-black/40 p-1 rounded-lg border border-border-dim">
-            <button 
+            <button
               onClick={() => setView('episodes')}
               className={`px-4 py-1.5 rounded-md text-xs font-semibold uppercase tracking-tighter transition-all ${view === 'episodes' ? 'bg-accent text-black shadow-lg shadow-accent/20' : 'hover:bg-white/5 text-text-dim'}`}
             >
               EPISODES
             </button>
-            <button 
+            <button
               onClick={() => setView('generate')}
               className={`px-4 py-1.5 rounded-md text-xs font-semibold uppercase tracking-tighter transition-all ${view === 'generate' ? 'bg-accent text-black shadow-lg shadow-accent/20' : 'hover:bg-white/5 text-text-dim'}`}
             >
               GENERATE
             </button>
-            <button 
+            <button
               onClick={() => setView('settings')}
               className={`px-4 py-1.5 rounded-md text-xs font-semibold uppercase tracking-tighter transition-all ${view === 'settings' ? 'bg-accent text-black shadow-lg shadow-accent/20' : 'hover:bg-white/5 text-text-dim'}`}
             >
               SETTINGS
+            </button>
+            <button
+              onClick={() => setView('apikey')}
+              className={`px-4 py-1.5 rounded-md text-xs font-semibold uppercase tracking-tighter transition-all ${view === 'apikey' ? 'bg-accent text-black shadow-lg shadow-accent/20' : 'hover:bg-white/5 text-text-dim'}`}
+            >
+              API KEY
             </button>
           </nav>
         </header>
@@ -206,10 +216,20 @@ export default function App() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
               >
-                <ChannelSettings 
-                  channel={selectedChannel} 
+                <ChannelSettings
+                  channel={selectedChannel}
                   onSaved={() => setView('episodes')}
                 />
+              </motion.div>
+            )}
+            {view === 'apikey' && (
+              <motion.div
+                key="apikey"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+              >
+                <ApiKeySettings />
               </motion.div>
             )}
           </AnimatePresence>
@@ -223,7 +243,7 @@ export default function App() {
               System Online
             </span>
             <span>Uptime: {uptime}</span>
-            <span>VOX_LIB v1.0.4</span>
+            <span>VOX_LIB v2.0.0</span>
           </div>
           <div className="text-[10px] font-mono text-text-muted flex gap-4">
             <span className="hover:text-accent cursor-pointer transition-colors">API_DOCS</span>
