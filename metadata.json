@@ -1,0 +1,6 @@
+{
+  "name": "VoxLib - Pro Podcast Storyteller",
+  "description": "Professional AI-powered podcast generator that converts electronic books into rich, audience-specific storytelling audio scripts and metadata.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["AI Script Generation", "Web Search Enrichment", "Multi-Channel Management"]
+}

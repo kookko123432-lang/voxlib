@@ -1,0 +1,105 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Phase 3: Primitive Definition
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Pillar 2: Validation Blueprints
+    function isValidChannel(data) {
+      return data.userId == request.auth.uid
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 100
+        && data.description is string && data.description.size() <= 500
+        && data.audience is string && data.audience.size() <= 100
+        && data.tone is string && data.tone.size() <= 100
+        && data.language is string && data.language.size() <= 50
+        && data.voice in ['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr']
+        && data.createdAt is string // Using ISO string for now based on app code
+        && data.updatedAt is string;
+    }
+
+    function isValidEpisode(data) {
+      return data.userId == request.auth.uid
+        && data.channelId is string && isValidId(data.channelId)
+        && data.bookTitle is string && data.bookTitle.size() >= 1 && data.bookTitle.size() <= 200
+        && data.status in ['draft', 'scripted', 'generating_audio', 'completed']
+        && data.duration is string && data.duration.size() <= 20
+        && data.enriched is bool
+        && (data.get('script', '') is string && data.get('script', '').size() <= 50000)
+        && (data.get('audioData', '') is string && data.get('audioData', '').size() <= 10000000) // 10MB limit for base64
+        && data.createdAt is string;
+    }
+
+    // 1. Channels Collection
+    match /channels/{channelId} {
+      allow get: if isOwner(existing().userId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      
+      allow create: if isSignedIn() 
+        && isValidChannel(incoming())
+        && incoming().keys().hasAll(['userId', 'name', 'audience', 'tone', 'language', 'voice', 'createdAt', 'updatedAt'])
+        && incoming().keys().size() == 9;
+
+      allow update: if isOwner(existing().userId)
+        && isValidChannel(incoming())
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'audience', 'tone', 'language', 'voice', 'updatedAt'])
+        );
+      
+      allow delete: if isOwner(existing().userId);
+    }
+
+    // 2. Episodes Collection
+    match /episodes/{episodeId} {
+      allow get: if isOwner(existing().userId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      allow create: if isSignedIn()
+        && isValidEpisode(incoming())
+        && exists(/databases/$(database)/documents/channels/$(incoming().channelId))
+        && get(/databases/$(database)/documents/channels/$(incoming().channelId)).data.userId == request.auth.uid
+        && incoming().keys().hasAll(['userId', 'channelId', 'bookTitle', 'status', 'duration', 'enriched', 'createdAt'])
+        && incoming().keys().size() == 7;
+
+      allow update: if isOwner(existing().userId)
+        && isValidEpisode(incoming())
+        && incoming().userId == existing().userId
+        && incoming().channelId == existing().channelId
+        && incoming().createdAt == existing().createdAt
+        && (
+          // Action: Set Script & Metadata
+          (incoming().diff(existing()).affectedKeys().hasAll(['title', 'description', 'script', 'updatedAt']) && 
+           incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'script', 'updatedAt'])) ||
+          // Action: Set Audio
+          (incoming().diff(existing()).affectedKeys().hasAll(['audioData', 'status', 'updatedAt']) && 
+           incoming().diff(existing()).affectedKeys().hasOnly(['audioData', 'status', 'updatedAt']))
+        );
+
+      allow delete: if isOwner(existing().userId);
+    }
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "entities": {
+    "Channel": {
+      "title": "Podcast Channel",
+      "description": "A podcast channel with specific audience and voice settings.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string", "description": "Owner of the channel" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "audience": { "type": "string", "description": "Target audience (e.g., Professionals, Students, Kids)" },
+        "tone": { "type": "string", "description": "Personality of the narrator (e.g., Serious, Energetic, Calm)" },
+        "language": { "type": "string", "description": "Language of the content (e.g., zh, en, etc.)" },
+        "voice": { "type": "string", "description": "Prebuilt voice name (Kore, Zephyr, Puck, etc.)" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "audience", "tone", "voice"]
+    },
+    "Episode": {
+      "title": "Podcast Episode",
+      "description": "A generated podcast episode based on a book.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string", "description": "Owner of the episode" },
+        "channelId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "bookTitle": { "type": "string" },
+        "script": { "type": "string" },
+        "audioData": { "type": "string", "description": "Base64 audio data" },
+        "duration": { "type": "string", "description": "Target duration" },
+        "status": { "type": "string", "enum": ["draft", "scripted", "generating_audio", "completed"] },
+        "enriched": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "channelId", "bookTitle", "status"]
+    }
+  },
+  "firestore": {
+    "channels": {
+      "schema": "Channel",
+      "description": "User podcast channels"
+    },
+    "episodes": {
+      "schema": "Episode",
+      "description": "Generated episodes for channels"
+    }
+  }
+}
