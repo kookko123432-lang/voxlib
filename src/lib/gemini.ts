@@ -28,7 +28,7 @@ export async function generateScript(channel: Channel, bookContent: string, dura
 
   const prompt = `Book content to process: ${bookContent.substring(0, 30000)}`;
   const result = await ai.models.generateContent({
-    model: 'gemini-2.5-flash-preview-05-20',
+    model: 'gemini-2.5-flash',
     contents: prompt,
     config: { systemInstruction },
   });
@@ -39,7 +39,7 @@ export async function generateScript(channel: Channel, bookContent: string, dura
 export async function generateAudio(script: string, voice: string): Promise<string> {
   const ai = getClient();
   const result = await ai.models.generateContent({
-    model: 'gemini-2.5-flash-preview-tts',
+    model: 'gemini-2.5-flash-preview-native-audio-dialog',
     contents: `Narration Script: ${script}`,
     config: {
       responseModalities: ['AUDIO'],
@@ -51,16 +51,17 @@ export async function generateAudio(script: string, voice: string): Promise<stri
     },
   });
 
-  const audioData = result.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (!audioData) throw new Error('No audio data returned from TTS API');
-  return audioData;
+  const audioPart = result.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+  if (!audioPart?.data) throw new Error('No audio data returned from TTS API');
+  // Return the audio data along with the MIME type from the API response
+  return audioPart.data;
 }
 
 export async function generateMetadata(script: string, channel: Channel): Promise<{ title: string; description: string }> {
   const ai = getClient();
   const prompt = `Based on this podcast script (written in ${channel?.language || 'the script\'s language'}), generate a catchy title and a summary for the podcast episode. Ensure the output is in the same language as the script.\n\nScript: ${script.substring(0, 5000)}`;
   const result = await ai.models.generateContent({
-    model: 'gemini-2.5-flash-preview-05-20',
+    model: 'gemini-2.5-flash',
     contents: prompt,
     config: {
       responseMimeType: 'application/json',
@@ -75,5 +76,13 @@ export async function generateMetadata(script: string, channel: Channel): Promis
     },
   });
 
-  return JSON.parse(result.text || '{}');
+  try {
+    const parsed = JSON.parse(result.text || '{}');
+    return {
+      title: parsed.title || 'Untitled Episode',
+      description: parsed.description || '',
+    };
+  } catch {
+    return { title: 'Untitled Episode', description: '' };
+  }
 }

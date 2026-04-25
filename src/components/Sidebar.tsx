@@ -1,6 +1,8 @@
 import React from 'react';
 import { Channel } from '../types';
-import { Mic2, Plus, KeyRound } from 'lucide-react';
+import { auth } from '../lib/firebase';
+import { signOut } from 'firebase/auth';
+import { Mic2, Plus, KeyRound, LogOut } from 'lucide-react';
 import { hasApiKey } from '../lib/apiKey';
 
 interface SidebarProps {
@@ -13,6 +15,12 @@ interface SidebarProps {
 
 export default function Sidebar({ channels, selectedChannelId, setSelectedChannelId, onAddChannel, onApiKeySettings }: SidebarProps) {
   const apiKeyConfigured = hasApiKey();
+
+  const handleSignOut = async () => {
+    if (window.confirm('Sign out of VoxLib?')) {
+      await signOut(auth);
+    }
+  };
 
   return (
     <aside className="w-64 flex flex-col bg-widget-bg border-r border-border-dim h-full">
@@ -82,6 +90,17 @@ export default function Sidebar({ channels, selectedChannelId, setSelectedChanne
           </div>
           <div className="text-[9px] text-right font-mono text-text-muted">{channels.length} channel{channels.length !== 1 ? 's' : ''}</div>
         </div>
+
+        {/* Sign Out */}
+        <button
+          onClick={handleSignOut}
+          className="w-full bg-app-bg p-3 rounded-lg border border-border-dim flex items-center gap-3 hover:border-red-500/50 transition-all text-left"
+        >
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-500/10">
+            <LogOut className="w-4 h-4 text-red-400" />
+          </div>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Sign Out</span>
+        </button>
       </div>
     </aside>
   );

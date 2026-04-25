@@ -59,7 +59,7 @@ service cloud.firestore {
 
       allow create: if isSignedIn()
         && isValidChannel(incoming())
-        && incoming().keys().hasAll(['userId', 'name', 'audience', 'tone', 'language', 'voice', 'createdAt', 'updatedAt'])
+        && incoming().keys().hasAll(['userId', 'name', 'description', 'audience', 'tone', 'language', 'voice', 'createdAt', 'updatedAt'])
         && incoming().keys().size() == 9;
 
       allow update: if isOwner(existing().userId)

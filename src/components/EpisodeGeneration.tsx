@@ -77,7 +77,8 @@ export default function EpisodeGeneration({ channel, onComplete }: EpisodeGenera
       setStep(3);
     } catch (e) {
       handleFirestoreError(e, 'create', 'episodes');
-      setProgress('CRITICAL_SYSTEM_FAILURE_CHECK_LOGS');
+      setStep(1);
+      setProgress('GENERATION_FAILED_RETRY');
     } finally {
       setIsProcessing(false);
     }
@@ -99,7 +100,7 @@ export default function EpisodeGeneration({ channel, onComplete }: EpisodeGenera
       for (let i = 0; i < binary.length; i++) {
         array[i] = binary.charCodeAt(i);
       }
-      const blob = new Blob([array], { type: 'audio/mpeg' });
+      const blob = new Blob([array], { type: 'audio/mp3' });
 
       const storageRef = ref(storage, `audio/${auth.currentUser.uid}/${currentEpisodeId}.mp3`);
       await uploadBytes(storageRef, blob);
@@ -114,6 +115,8 @@ export default function EpisodeGeneration({ channel, onComplete }: EpisodeGenera
       setStep(4);
     } catch (e) {
       handleFirestoreError(e, 'update', 'episodes');
+      setStep(3);
+      setProgress('AUDIO_GENERATION_FAILED_RETRY');
     } finally {
       setIsProcessing(false);
     }
